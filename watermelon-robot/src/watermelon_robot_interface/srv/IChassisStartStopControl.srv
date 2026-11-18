@@ -1,0 +1,8 @@
+# Request
+float64 timestamp
+bool status
+---
+# Response
+float64 timestamp
+bool is_success
+string message

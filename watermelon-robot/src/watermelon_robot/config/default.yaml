@@ -1,0 +1,244 @@
+########################################### 以下是通用配置 ##########################################
+# 目标检测模型相关
+model: 
+  name: "yolov26-best-fp16.engine"
+  task: "target-detection"
+  use_engine: True
+  device_no: "0"
+  use_half: True
+  image_size: [480, 640]
+  confidence: 0.5
+  iou: 0.8
+
+# -------------------------------------------------------
+# 机械臂配置相关
+robotic_arm: 
+  ip: "192.168.58.2"
+  speed_rate: 20
+  # tool_standby_sextuple: [-300, -102, 450, 90, 0, -90]
+  # camera_pose_matix: [[-1, 0, 0, 25],
+  #                     [0, -1, 0, 60],
+  #                     [0, 0, 1, 10],
+  #                     [0, 0, 0, 1]]
+  tool_standby_sextuple: [102, -282.5, 418, 180, -90, -90]
+  camera_pose_matix: [[0, -1, 0, 25],
+                      [1, 0, 0, 60],
+                      [0, 0, 1, 10],
+                      [0, 0, 0, 1]]
+  tool_error: [0, 50, -50]
+
+robotic_arm_s: 
+  ip: "192.168.58.2"
+  speed_rate: 20
+  tool_standby_sextuple: [102, -230, 190, 179, -89, -89]
+  camera_pose_matix: [[0, -1, 0, 25],
+                      [1, 0, 0, 60],
+                      [0, 0, 1, 10],
+                      [0, 0, 0, 1]]
+  tool_error: [-60, 170, -90]
+
+# -------------------------------------------------------
+# 导航线检测相关
+lane_detection: 
+  roi: 
+    y_min_portion: 0.7
+    y_max_portion: 0.9
+  detect_step: 5
+  terminal_distance: 500
+  use_yolo: True
+  cv:
+    maximum_window_size: 5
+    reference_depth: 5
+  model:  
+    name: "yolo26n-seg-b64-1779671885-fp16.engine"
+    task: "lane-detection"
+    use_engine: True
+    device_no: "0"
+    use_half: True
+    confidence: 0.8
+
+# -------------------------------------------------------
+# 底盘控制相关
+
+chassis: 
+  pid_controller: 
+    pid_triple: [1.2, 0.1, 0.05]
+    control_interval: 0.01
+    maximum_output_abs: 100
+  forward_speed: 0.35
+
+# -------------------------------------------------------
+# 剪刀控制相关
+
+scissors:
+  tool_id: 8
+  close_flag: 1
+  open_delay_sec: 2
+
+######################################## 以下是节点初始化器配置 ########################################
+_node_initializer:
+
+  ################
+  # 上逻辑控制器 #
+  ################
+  CELESTIAL_FULCRUM:
+
+    # 标准通信接口配置块 ###################
+    ##################
+    input_0: "t/realsense/on_hand/color_raw"            # 输入：手眼相机彩色原始画面
+    input_1: "t/realsense/on_hand/depth_raw"            # 输入：手眼相机深度原始画面
+    input_2: "t/realsense/on_hand/camera_intrinsics"    # 输入：手眼相机内参
+    output_0: "t/monitor/sup/color_boxed"               # 输出：手眼相机目标框叠加层
+    duplex_0: "s/robotic_arm/action_once"               # 双工：机械臂控制
+    duplex_1: "s/logic_controller/comm"                 # 双工：上/下逻辑控制器
+
+    # 通用配置块 ###################
+    ###########
+    ats:                                                # 近似时序同步器
+      queue_size: 10                                    # 缓存队列大小
+      slop: 0.05                                        # 最大时间差（秒）
+    heartbeat_interval: 0.01                            # Heartbeat 循环周期
+    request_retransmission_limit: 3                     # 控制底盘停止的请求重传次数上限
+    is_test: True                                       # 是否为单元测试环境（测试环境会忽略某些上下逻辑控制器响应要求
+
+# -------------------------------------------------------
+  
+  ##############
+  # 机械臂控制器 #
+  ##############
+  CAERULA_ARBOR:
+
+    # 标准通信接口配置块 ###################
+    ##################
+    duplex_0: "s/robotic_arm/action_once"               # 双工：机械臂控制
+
+    # 通用配置块 ###################
+    ###########
+
+# -------------------------------------------------------
+
+  ############################
+  # Realsense 相机控制器：手眼 #
+  ############################
+  PRESERVATOR:
+
+    # 标准通信接口配置块 ###################
+    ##################
+    output_0: "t/realsense/on_hand/color_raw"           # 输出：手眼相机彩色原始画面
+    output_1: "t/realsense/on_hand/depth_raw"           # 输出：手眼相机深度原始画面
+    output_2: "t/realsense/on_hand/camera_intrinsics"   # 输出：手眼相机内参
+
+    # 通用配置块 ###################
+    ###########
+    fps: 30           # 画面采集帧率
+
+# -------------------------------------------------------
+
+  ##################
+  # 监视器：手眼相机彩色图（预测框叠加层） #
+  ##################
+  PRIESTESS_EYES_0:
+
+    # 标准通信接口配置块 ###################
+    ##################
+    input_0: "t/monitor/sup/color_boxed"             # 输入：手眼相机目标框叠加层
+
+    # 通用配置块 ###################
+    ###########
+    fps: 30                           # 监视器显示帧率
+    is_livestream: True               # 开启网页推流
+    livestream_port: 8080             # 推流端口号
+
+# -------------------------------------------------------
+  ################
+  # 下逻辑控制器 #
+  ################
+  LYNCHPIN:
+
+    # 标准通信接口配置块 ###################
+    ##################
+    input_0: "t/realsense/on_chassis/color_raw"           # 输入：底盘相机彩色原始画面
+    input_1: "t/realsense/on_chassis/depth_raw"           # 输入：底盘相机深度原始画面
+    input_2: "t/realsense/on_chassis/camera_intrinsics"   # 输入：底盘相机内参
+    output_0: "t/chassis/direction_correction_value"      # 输出：底盘方向修正量
+    output_1: "t/monitor/sub/color_navigation"            # 输出：底盘相机预测轨迹叠加层
+    output_2: "t/monitor/sub/additional"                  # 输出：底盘相机形态学二值图
+    duplex_0: "s/logic_controller/comm"                   # 双工：上/下逻辑控制器
+    duplex_1: "s/chassis/start_stop"                      # 双工：底盘启停控制
+
+    # 通用配置块 ###################
+    ###########
+    ats:                                                  # 近似时序同步器
+      queue_size: 10                                      # 缓存队列大小
+      slop: 0.05                                          # 最大时间差（秒）
+    heartbeat_interval: 0.01                              # Heartbeat 循环周期
+    is_test: True                                         # 是否为单元测试环境（测试环境会忽略某些上下逻辑控制器响应要求
+
+# -------------------------------------------------------
+  
+  #############
+  # 底盘控制器 #
+  #############
+  DWDB_221E:
+
+    # 标准通信接口配置块 ###################
+    ##################
+    input_0: "t/chassis/direction_correction_value"   # 底盘方向控制
+    output_0: "cmd_vel"                               # 轮趣 SDK：底盘控制信号
+    duplex_0: "s/chassis/start_stop"                  # 双工：底盘启停控制
+
+    # 通用配置块 ###################
+    ###########
+
+# -------------------------------------------------------
+  
+  ############################
+  # Realsense 相机控制器：底盘 #
+  ############################
+  AMA_10:
+
+    # 标准通信接口配置块 ###################
+    ##################
+    output_0: "t/realsense/on_chassis/color_raw"            # 输出：底盘相机彩色原始画面
+    output_1: "t/realsense/on_chassis/depth_raw"            # 输出：底盘相机深度原始画面
+    output_2: "t/realsense/on_chassis/camera_intrinsics"    # 输出：底盘相机内参
+
+    # 通用配置块 ###################
+    ###########
+    fps: 30           # 画面采集帧率
+
+# -------------------------------------------------------
+
+  ##################
+  # 监视器：底盘相机彩色图（预测轨迹叠加层） #
+  ##################
+  ZERO_ORDER_OIL_TANK_0:
+
+    # 标准通信接口配置块 ###################
+    ##################
+    input_0: "t/monitor/sub/color_navigation"  # 输入：底盘相机预测轨迹叠加层
+
+    # 通用配置块 ###################
+    ###########
+    fps: 30                           # 监视器显示帧率
+    is_livestream: True               # 开启网页推流
+    livestream_port: 8080             # 推流端口号
+
+# -------------------------------------------------------
+
+  ##########################
+  # 监视器：底盘相机辅助图像 #
+  ##########################
+  ZERO_ORDER_OIL_TANK_1:
+
+    # 标准通信接口配置块 ###################
+    ##################
+    input_0: "t/monitor/sub/additional"          # 输入：底盘相机预测轨迹叠加层
+
+    # 通用配置块 ###################
+    ###########
+    fps: 30                           # 监视器显示帧率
+    is_livestream: True               # 开启网页推流
+    livestream_port: 8081             # 推流端口号
+
+# -------------------------------------------------------
